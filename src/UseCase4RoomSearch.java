@@ -1,44 +1,33 @@
 import java.util.HashMap;
 
-public class BookMyStayApp {
+public class UseCase4RoomSearch {
 
     public static void main(String[] args) {
 
-        // UC1 - Welcome Message
         System.out.println("=================================");
-        System.out.println(" Welcome to BookMyStay ");
-        System.out.println(" Hotel Booking System v3.1 ");
+        System.out.println(" Book My Stay Application v4.1 ");
+        System.out.println(" Room Search & Availability ");
         System.out.println("=================================");
 
-        // UC2 - Room Objects
+        // Room domain objects
         Room single = new SingleRoom();
         Room doubleRoom = new DoubleRoom();
         Room suite = new SuiteRoom();
 
-        // UC3 - Centralized Inventory
+        // Centralized inventory (UC3)
         RoomInventory inventory = new RoomInventory();
 
-        // Display Room Details with Inventory
-        System.out.println("\nSingle Room Details");
-        single.display();
-        System.out.println("Available: " + inventory.getAvailability("Single Room"));
+        // Search Service
+        RoomSearchService search = new RoomSearchService(inventory);
 
-        System.out.println("\nDouble Room Details");
-        doubleRoom.display();
-        System.out.println("Available: " + inventory.getAvailability("Double Room"));
-
-        System.out.println("\nSuite Room Details");
-        suite.display();
-        System.out.println("Available: " + inventory.getAvailability("Suite Room"));
-
-        // Display full inventory
-        inventory.displayInventory();
+        // Perform search (UC4)
+        search.searchAvailableRooms(single, doubleRoom, suite);
     }
 }
 
 
 // ---------------------------
-// Abstract Room Class (UC2)
+// Abstract Room Class
 // ---------------------------
 abstract class Room {
 
@@ -86,7 +75,7 @@ class SuiteRoom extends Room {
 
 
 // ---------------------------
-// UC3 - Inventory Management
+// UC3 Inventory Management
 // ---------------------------
 class RoomInventory {
 
@@ -104,17 +93,35 @@ class RoomInventory {
     int getAvailability(String roomType) {
         return inventory.get(roomType);
     }
+}
 
-    void updateAvailability(String roomType, int count) {
-        inventory.put(roomType, count);
+
+// ---------------------------
+// UC4 Search Service
+// ---------------------------
+class RoomSearchService {
+
+    private RoomInventory inventory;
+
+    RoomSearchService(RoomInventory inventory) {
+        this.inventory = inventory;
     }
 
-    void displayInventory() {
+    void searchAvailableRooms(Room... rooms) {
 
-        System.out.println("\nCurrent Room Inventory:");
+        System.out.println("\nAvailable Rooms:\n");
 
-        for (String room : inventory.keySet()) {
-            System.out.println(room + " : " + inventory.get(room));
+        for (Room room : rooms) {
+
+            int availability = inventory.getAvailability(room.roomType);
+
+            // Defensive check
+            if (availability > 0) {
+
+                room.display();
+                System.out.println("Available: " + availability);
+                System.out.println("---------------------");
+            }
         }
     }
 }
