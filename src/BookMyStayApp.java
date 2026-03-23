@@ -5,57 +5,71 @@ public class BookMyStayApp {
     public static void main(String[] args) {
 
         System.out.println("=================================");
-        System.out.println(" Book My Stay Application v7.0 ");
-        System.out.println(" Reservation + Add-On Services ");
+        System.out.println(" Book My Stay Application v8.0 ");
+        System.out.println(" Full System (UC1 - UC8) ");
         System.out.println("=================================");
 
-        // Room objects
+        // -------------------------------
+        // UC1 & UC2: Room Types
+        // -------------------------------
         Room single = new SingleRoom();
         Room doubleRoom = new DoubleRoom();
         Room suite = new SuiteRoom();
 
-        // Inventory
+        // -------------------------------
+        // UC3: Inventory
+        // -------------------------------
         RoomInventory inventory = new RoomInventory();
 
-        // Search (UC4)
+        // -------------------------------
+        // UC4: Search
+        // -------------------------------
         RoomSearchService search = new RoomSearchService(inventory);
         search.searchAvailableRooms(single, doubleRoom, suite);
 
-        // Booking Queue (UC5)
+        // -------------------------------
+        // UC5: Booking Queue
+        // -------------------------------
         BookingRequestQueue queue = new BookingRequestQueue();
 
         queue.addRequest(new Reservation("Alice", "Single Room"));
         queue.addRequest(new Reservation("Bob", "Double Room"));
         queue.addRequest(new Reservation("Charlie", "Suite Room"));
 
-        // Booking Service (UC6)
-        BookingService bookingService = new BookingService(inventory);
+        // -------------------------------
+        // UC8: Booking History
+        // -------------------------------
+        BookingHistory history = new BookingHistory();
+
+        // -------------------------------
+        // UC6: Booking Service
+        // -------------------------------
+        BookingService bookingService = new BookingService(inventory, history);
         bookingService.processBookings(queue);
 
-        // ===============================
-        // USE CASE 7: ADD-ON SERVICES
-        // ===============================
-
-        System.out.println("\n=== Add-On Service Selection ===");
+        // -------------------------------
+        // UC7: Add-On Services
+        // -------------------------------
+        System.out.println("\n=== Add-On Services ===");
 
         String reservationId = "RES101";
 
-        AddOnService breakfast = new AddOnService("Breakfast", 20);
-        AddOnService spa = new AddOnService("Spa", 50);
-        AddOnService pickup = new AddOnService("Airport Pickup", 30);
-
         AddOnServiceManager manager = new AddOnServiceManager();
 
-        manager.addService(reservationId, breakfast);
-        manager.addService(reservationId, spa);
-        manager.addService(reservationId, pickup);
+        manager.addService(reservationId, new AddOnService("Breakfast", 20));
+        manager.addService(reservationId, new AddOnService("Spa", 50));
+        manager.addService(reservationId, new AddOnService("Airport Pickup", 30));
 
         manager.displayServices(reservationId);
 
         double total = manager.calculateTotalCost(reservationId);
-
         System.out.println("Total Add-On Cost: $" + total);
-        System.out.println("(Booking & Inventory remain unchanged)");
+
+        // -------------------------------
+        // UC8: Reporting
+        // -------------------------------
+        BookingReportService reportService = new BookingReportService();
+        reportService.generateReport(history.getAllReservations());
     }
 }
 
@@ -109,9 +123,7 @@ class RoomInventory {
     private HashMap<String, Integer> inventory;
 
     RoomInventory() {
-
         inventory = new HashMap<>();
-
         inventory.put("Single Room", 5);
         inventory.put("Double Room", 3);
         inventory.put("Suite Room", 2);
@@ -164,10 +176,23 @@ class Reservation {
 
     String guestName;
     String roomType;
+    String roomId;
 
     Reservation(String guestName, String roomType) {
         this.guestName = guestName;
         this.roomType = roomType;
+    }
+
+    Reservation(String guestName, String roomType, String roomId) {
+        this.guestName = guestName;
+        this.roomType = roomType;
+        this.roomId = roomId;
+    }
+
+    public String toString() {
+        return "Guest: " + guestName +
+                ", Room Type: " + roomType +
+                ", Room ID: " + roomId;
     }
 }
 
@@ -194,17 +219,36 @@ class BookingRequestQueue {
 }
 
 //////////////////////////////////////////////////////
+// BOOKING HISTORY (UC8)
+//////////////////////////////////////////////////////
+
+class BookingHistory {
+
+    private List<Reservation> history = new ArrayList<>();
+
+    void addReservation(Reservation r) {
+        history.add(r);
+    }
+
+    List<Reservation> getAllReservations() {
+        return history;
+    }
+}
+
+//////////////////////////////////////////////////////
 // BOOKING SERVICE (UC6)
 //////////////////////////////////////////////////////
 
 class BookingService {
 
     private RoomInventory inventory;
+    private BookingHistory history;
+
     private HashMap<String, Set<String>> allocatedRooms;
 
-    BookingService(RoomInventory inventory) {
-
+    BookingService(RoomInventory inventory, BookingHistory history) {
         this.inventory = inventory;
+        this.history = history;
         allocatedRooms = new HashMap<>();
     }
 
@@ -227,6 +271,9 @@ class BookingService {
 
                 inventory.decreaseAvailability(r.roomType);
 
+                // Store confirmed booking (UC8)
+                history.addReservation(new Reservation(r.guestName, r.roomType, roomId));
+
                 System.out.println("Reservation Confirmed");
                 System.out.println("Guest: " + r.guestName);
                 System.out.println("Room Type: " + r.roomType);
@@ -234,7 +281,6 @@ class BookingService {
                 System.out.println("---------------------");
 
             } else {
-
                 System.out.println("No rooms available for " + r.guestName);
             }
         }
@@ -251,7 +297,7 @@ class BookingService {
 }
 
 //////////////////////////////////////////////////////
-// ADD-ON SERVICE (UC7)
+// ADD-ON SERVICES (UC7)
 //////////////////////////////////////////////////////
 
 class AddOnService {
@@ -269,16 +315,11 @@ class AddOnService {
     }
 }
 
-//////////////////////////////////////////////////////
-// ADD-ON SERVICE MANAGER (UC7)
-//////////////////////////////////////////////////////
-
 class AddOnServiceManager {
 
     private HashMap<String, List<AddOnService>> serviceMap = new HashMap<>();
 
     void addService(String reservationId, AddOnService service) {
-
         serviceMap.putIfAbsent(reservationId, new ArrayList<>());
         serviceMap.get(reservationId).add(service);
     }
@@ -288,11 +329,9 @@ class AddOnServiceManager {
         List<AddOnService> services = serviceMap.get(reservationId);
 
         if (services == null || services.isEmpty()) {
-            System.out.println("No add-on services selected.");
+            System.out.println("No add-on services.");
             return;
         }
-
-        System.out.println("\nAdd-On Services:");
 
         for (AddOnService s : services) {
             System.out.println("- " + s);
@@ -312,5 +351,28 @@ class AddOnServiceManager {
         }
 
         return total;
+    }
+}
+
+//////////////////////////////////////////////////////
+// REPORT SERVICE (UC8)
+//////////////////////////////////////////////////////
+
+class BookingReportService {
+
+    void generateReport(List<Reservation> reservations) {
+
+        System.out.println("\n===== Booking Report =====");
+
+        if (reservations.isEmpty()) {
+            System.out.println("No bookings found.");
+            return;
+        }
+
+        for (Reservation r : reservations) {
+            System.out.println(r);
+        }
+
+        System.out.println("\nTotal Bookings: " + reservations.size());
     }
 }
