@@ -1,3 +1,4 @@
+import java.io.*;
 import java.util.*;
 
 public class BookMyStayApp {
@@ -5,14 +6,26 @@ public class BookMyStayApp {
     public static void main(String[] args) {
 
         System.out.println("=================================");
-        System.out.println(" Book My Stay Application v11.0 ");
-        System.out.println(" Full System (UC1 - UC11) ");
+        System.out.println(" Book My Stay Application v12.0 ");
+        System.out.println(" Full System (UC1 - UC12) ");
         System.out.println("=================================");
 
         // -------------------------------
-        // UC1–UC3: Setup
+        // UC12: Load persisted state
         // -------------------------------
-        RoomInventory inventory = new RoomInventory();
+        PersistenceService persistence = new PersistenceService();
+        Object[] data = persistence.load();
+
+        RoomInventory inventory;
+        BookingHistory history;
+
+        if (data != null) {
+            inventory = (RoomInventory) data[0];
+            history = (BookingHistory) data[1];
+        } else {
+            inventory = new RoomInventory();
+            history = new BookingHistory();
+        }
 
         // -------------------------------
         // UC4: Search
@@ -30,9 +43,8 @@ public class BookMyStayApp {
         queue.addRequest(new Reservation("Eve", "Suite Room"));
 
         // -------------------------------
-        // UC8 + UC9
+        // UC9: Validation
         // -------------------------------
-        BookingHistory history = new BookingHistory();
         BookingValidator validator = new BookingValidator();
 
         // -------------------------------
@@ -71,12 +83,11 @@ public class BookMyStayApp {
                 .generateReport(history.getAllReservations());
 
         // -------------------------------
-        // UC11: Concurrency Simulation
+        // UC11: Concurrency
         // -------------------------------
         System.out.println("\n=== Concurrent Booking Simulation ===");
 
         BookingQueue sharedQueue = new BookingQueue();
-
         sharedQueue.addRequest(new Reservation("User1", "Single Room"));
         sharedQueue.addRequest(new Reservation("User2", "Single Room"));
         sharedQueue.addRequest(new Reservation("User3", "Single Room"));
@@ -90,9 +101,14 @@ public class BookMyStayApp {
         try {
             t1.join();
             t2.join();
-        } catch (InterruptedException e) {}
+        } catch (Exception e) {}
 
-        System.out.println("\nSystem execution completed.");
+        // -------------------------------
+        // UC12: Save state
+        // -------------------------------
+        persistence.save(inventory, history);
+
+        System.out.println("\nSystem completed with persistence.");
     }
 }
 
@@ -100,15 +116,15 @@ public class BookMyStayApp {
 // ROOMS (UC1, UC2)
 //////////////////////////////////////////////////////
 
-abstract class Room {
+abstract class Room implements Serializable {
     String roomType;
     int beds;
     double price;
 
-    Room(String type, int beds, double price) {
-        this.roomType = type;
-        this.beds = beds;
-        this.price = price;
+    Room(String t, int b, double p) {
+        roomType = t;
+        beds = b;
+        price = p;
     }
 
     void display() {
@@ -127,10 +143,10 @@ class SuiteRoom extends Room {
 }
 
 //////////////////////////////////////////////////////
-// INVENTORY (UC3)
+// INVENTORY (UC3 + UC12 Serializable)
 //////////////////////////////////////////////////////
 
-class RoomInventory {
+class RoomInventory implements Serializable {
 
     private Map<String, Integer> map = new HashMap<>();
 
@@ -140,18 +156,18 @@ class RoomInventory {
         map.put("Suite Room", 1);
     }
 
-    synchronized int getAvailability(String type) {
-        return map.getOrDefault(type, 0);
+    synchronized int getAvailability(String t) {
+        return map.getOrDefault(t, 0);
     }
 
-    synchronized void decreaseAvailability(String type) throws Exception {
-        if (getAvailability(type) <= 0)
+    synchronized void decreaseAvailability(String t) throws Exception {
+        if (getAvailability(t) <= 0)
             throw new Exception("No availability");
-        map.put(type, getAvailability(type) - 1);
+        map.put(t, getAvailability(t) - 1);
     }
 
-    synchronized void increaseAvailability(String type) {
-        map.put(type, getAvailability(type) + 1);
+    synchronized void increaseAvailability(String t) {
+        map.put(t, getAvailability(t) + 1);
     }
 }
 
@@ -160,14 +176,15 @@ class RoomInventory {
 //////////////////////////////////////////////////////
 
 class RoomSearchService {
-    private RoomInventory inventory;
 
-    RoomSearchService(RoomInventory inv) { this.inventory = inv; }
+    RoomInventory inv;
+
+    RoomSearchService(RoomInventory i) { inv = i; }
 
     void searchAvailableRooms(Room... rooms) {
         System.out.println("\nAvailable Rooms:");
         for (Room r : rooms) {
-            int a = inventory.getAvailability(r.roomType);
+            int a = inv.getAvailability(r.roomType);
             if (a > 0) {
                 r.display();
                 System.out.println("Available: " + a);
@@ -177,20 +194,24 @@ class RoomSearchService {
 }
 
 //////////////////////////////////////////////////////
-// RESERVATION (UC5)
+// RESERVATION (UC5 + Serializable)
 //////////////////////////////////////////////////////
 
-class Reservation {
+class Reservation implements Serializable {
+
     String guestName;
     String roomType;
     String roomId;
 
     Reservation(String g, String t) {
-        guestName = g; roomType = t;
+        guestName = g;
+        roomType = t;
     }
 
     Reservation(String g, String t, String id) {
-        guestName = g; roomType = t; roomId = id;
+        guestName = g;
+        roomType = t;
+        roomId = id;
     }
 
     public String toString() {
@@ -211,10 +232,11 @@ class BookingRequestQueue {
 }
 
 //////////////////////////////////////////////////////
-// HISTORY (UC8)
+// HISTORY (UC8 + Serializable)
 //////////////////////////////////////////////////////
 
-class BookingHistory {
+class BookingHistory implements Serializable {
+
     List<Reservation> list = new ArrayList<>();
 
     void addReservation(Reservation r) { list.add(r); }
@@ -390,6 +412,36 @@ class BookingProcessor extends Thread {
                     System.out.println(getName()+" failed");
                 }
             }
+        }
+    }
+}
+
+//////////////////////////////////////////////////////
+// PERSISTENCE (UC12)
+//////////////////////////////////////////////////////
+
+class PersistenceService {
+
+    String FILE = "data.ser";
+
+    void save(RoomInventory inv, BookingHistory hist) {
+        try(ObjectOutputStream o =
+                    new ObjectOutputStream(new FileOutputStream(FILE))){
+            o.writeObject(inv);
+            o.writeObject(hist);
+            System.out.println("Data saved.");
+        } catch(Exception e){
+            System.out.println("Save error.");
+        }
+    }
+
+    Object[] load() {
+        try(ObjectInputStream i =
+                    new ObjectInputStream(new FileInputStream(FILE))){
+            return new Object[]{i.readObject(), i.readObject()};
+        } catch(Exception e){
+            System.out.println("No previous data.");
+            return null;
         }
     }
 }
